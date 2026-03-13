@@ -24,7 +24,7 @@ contract CrowdFund {
     {
         thresholdETH = _thresholdETH;
         deadline = _deadline;
-        ownerContract = _ownerContract
+        ownerContract = _ownerContract;
     }
 
     modifier enoughMoneyCollected () {
@@ -40,9 +40,14 @@ contract CrowdFund {
         _;
     }
 
+    event depositReceived(address indexed sender, string message);
+
+    event Log(address indexed sender, string message);
+
     function deposit() public payable {
-        // balane is updated automatically
-        moneyCollected[msg.sender] = msg.value;
+        // balance is updated automatically
+        emit depositReceived(msg.sender, "we have received your deposit");
+        moneyCollected[msg.sender] += msg.value;
     }
 
     function withdraw() public {
@@ -55,5 +60,9 @@ contract CrowdFund {
         // how do I transfer funds to another contract?
         // push vs pull pattern?
         // does this get trigered automatically when conditions are fulfilled?
+    }
+
+    receive() external payable {
+        emit Log(msg.sender, "receive()");
     }
 }
