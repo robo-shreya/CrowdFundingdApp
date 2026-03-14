@@ -2,6 +2,8 @@
 
 pragma solidity ^0.8.4;
 
+import "./ExampleExternalContract.sol";
+
 contract CrowdFundContract {
 
     //contract that collects ETH from numerous addresses using a payable stake()
@@ -16,19 +18,22 @@ contract CrowdFundContract {
 
     mapping(address => uint256) public moneyCollected;
 
-    address public fundRecipientContract;
+    ExampleExternalContract public fundRecipientContract;
+
+    bool public completed;
     
     constructor (
         uint256 _thresholdETH, 
         uint256 _deadline,
-        address _fundRecipientContract)
+        address _fundRecipientContract
+        )
     {
         thresholdETH = _thresholdETH;
         deadline = _deadline;
-        fundRecipientContract = _fundRecipientContract;
+        fundRecipientContract = ExampleExternalContract(_fundRecipientContract);
     }
 
-    // had to convert from modifiers to functions because I needed the inverse for withdraw()
+    // had to convert from modifiers to functions because I needed the inverse too
 
     // modifier enoughMoneyNotCollected() {
     //     require((address(this).balance <= thresholdETH), "we've gotten enough ETH");
@@ -40,19 +45,15 @@ contract CrowdFundContract {
     //     _;
     // }
 
-    function isEnoughETHCollected() public view returns (bool){
-        if (address(this).balance <= thresholdETH){
-            return true;
-        } 
-        return false;
+    function isEnoughETHCollected() public view returns (bool) {
+        return address(this).balance >= thresholdETH;
     }
 
-    function campaignActive() public view returns (bool){
-        if (block.timestamp < deadline) return true;
-        return false;
+    function campaignActive() public view returns (bool) {
+        return block.timestamp < deadline;
     }
 
-    event depositReceived(address indexed sender, uint256 indexed amount, string message);
+    event DepositReceived(address indexed sender, uint256 amount, string message);
 
     event Log(address indexed sender, string message);
 
@@ -68,7 +69,7 @@ contract CrowdFundContract {
 
         moneyCollected[msg.sender] += msg.value;
 
-        emit depositReceived(msg.sender, msg.value, "deposit made");
+        emit DepositReceived(msg.sender, msg.value, "deposit made");
         
     }
 
@@ -78,38 +79,34 @@ contract CrowdFundContract {
 
         require(!isEnoughETHCollected(), "enough money was collected");
 
-                // check user's deposit amount
-                // wait, what about reentrancy???? how do I check for that
-                uint256 amount = moneyCollected[msg.sender];
-                require(amount > 0, "no amount deposited");
+        // check user's deposit amount
+        uint256 amount = moneyCollected[msg.sender];
+        require(amount > 0, "no amount deposited");
 
-                // updating balance
-                moneyCollected[msg.sender] = 0;
+        // updating balance
+        moneyCollected[msg.sender] = 0;
 
-                // send money
-                (bool success, ) = payable(msg.sender).call{value: amount}("");
-                require(success, "withdrawal failed");
+        // send money
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "withdrawal failed");
     }
 
-    function transfer() public {
-        // in case the deadline has passed or enough money has been collected, send ETH to external contract
-        // how do I transfer funds to another contract?
-        // does this get trigered automatically when conditions are fulfilled?
+    function completeCampaign() public {
         
         require(isEnoughETHCollected(), "not enough ETH collected");
 
         require(!campaignActive(), "campaign is still active");
 
-        (bool success, ) = payable(fundRecipientContract).call{value: address(this).balance}("");
+        require(!completed, "campaign already completed");
 
-        require(success, "Completion transfer failed");
+        completed = true;
 
-        emit CompleteCampaign(fundRecipientContract, "successfully finished campaign");
+        fundRecipientContract.complete{value: address(this).balance}();
 
     }
 
     receive() external payable {
-        emit Log(msg.sender, "receive()");
+        revert("use deposit()");
     }
 
     // TODO rename the contract and deposit function before submitting to the challenge
